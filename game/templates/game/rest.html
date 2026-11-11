@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dam olish</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #1f2a4d; color: white; margin: 0; padding: 30px 20px; }
+    .big { font-size: 90px; margin-top: 30px; }
+    #cd { font-size: 44px; margin: 14px 0; font-weight: bold; }
+    .navbtn { display: inline-block; padding: 12px 22px; margin: 6px; border-radius: 16px;
+              background: white; color: #333; text-decoration: none; font-size: 20px; }
+  </style>
+</head>
+<body>
+  <div class="big">🌙</div>
+  <h1>Dam olish vaqti!</h1>
+  <p style="font-size:20px">Ko'zlaringiz dam olsin. Keyingi o'yingacha:</p>
+  <div id="cd"></div>
+  <p style="font-size:18px">Shu orada hayvoningni boqishing mumkin 🐣</p>
+  <a class="navbtn" href="/pet/">🐣 Hayvonim</a>
+  <a class="navbtn" href="/stickers/">🎁 Stikerlar</a>
+  <a class="navbtn" href="/">🏠 Menyu</a>
+  <script>
+    let wait = {{ wait }};
+    const cd = document.getElementById("cd");
+    function show() {
+      const h = Math.floor(wait / 3600), m = Math.floor(wait % 3600 / 60), s = wait % 60;
+      cd.textContent = h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    }
+    show();
+    setInterval(() => { wait--; show(); if (wait <= 0) location.href = "/"; }, 1000);
+  </script>
+</body>
+</html>

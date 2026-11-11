@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kirish</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #fff7d6; padding: 20px; }
+    form { background: white; max-width: 340px; margin: 20px auto; padding: 20px; border-radius: 18px; }
+    input { font-size: 18px; padding: 8px; width: 90%; margin: 4px 0; }
+    button { font-size: 22px; padding: 12px 30px; border: none; border-radius: 14px; background: #4f9dff; color: white; margin-top: 10px; }
+    .helptext, ul { font-size: 12px; color: #888; text-align: left; }
+    p { text-align: left; }
+  </style>
+</head>
+<body>
+  <h1>🌟 KidsLingo</h1>
+  <h2>Kirish</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Kirish</button>
+  </form>
+  <a href="/signup/">Ro'yxatdan o'tish</a>
+</body>
+</html>

@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KidsLingo</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #fff7d6; margin: 0; padding: 16px; }
+    .navbtn { display: inline-block; padding: 6px 14px; margin: 2px; border-radius: 14px;
+              background: white; color: #333; text-decoration: none; font-size: 18px;
+              box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+    #top { font-size: 24px; margin-top: 6px; }
+    #next { font-size: 15px; color: #888; margin: 4px 0; }
+    #barwrap { width: 80%; max-width: 320px; height: 12px; background: #ddd; border-radius: 6px; margin: 4px auto 10px; overflow: hidden; }
+    #bar { height: 100%; width: 0; background: #2ecc71; transition: width .5s; }
+    .pic { font-size: 100px; margin: 10px 0 0; }
+    .hint { font-size: 22px; margin: 6px 0 10px; }
+    .sent { font-size: 28px; font-weight: bold; margin: 10px 14px; min-height: 40px; }
+    .btn { display: block; width: 80%; max-width: 320px; margin: 10px auto; padding: 14px;
+           font-size: 24px; border: none; border-radius: 16px; background: #4f9dff; color: white; }
+    .btn.bad { background: #bbb; }
+    .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-width: 300px; margin: 10px auto; }
+    .ebtn { font-size: 64px; padding: 10px; border: none; border-radius: 18px; background: white; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+    .ebtn.bad { opacity: .3; }
+    .speak { font-size: 50px; border: none; background: #ff9f43; border-radius: 50%; width: 90px; height: 90px; }
+    .speak:disabled { opacity: .5; }
+    #slots { font-size: 36px; letter-spacing: 6px; min-height: 50px; margin: 10px 0; font-weight: bold; }
+    .tile { font-size: 30px; width: 54px; height: 54px; margin: 4px; border: none; border-radius: 12px; background: #4f9dff; color: white; }
+    .tile:disabled { opacity: .25; }
+    .reset { font-size: 20px; margin-top: 10px; padding: 8px 20px; border: none; border-radius: 12px; background: #ddd; }
+    .mem { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 340px; margin: 10px auto; }
+    .card { height: 84px; font-size: 38px; border: none; border-radius: 14px; background: #4f9dff; color: white; padding: 2px; }
+    .card.small { font-size: 18px; }
+    .card.open { background: white; color: #333; }
+    .card.done { background: #c8f7c5; color: #333; }
+    #uz { font-size: 22px; color: #888; min-height: 28px; }
+    #msg { font-size: 22px; min-height: 60px; margin: 6px 12px 0; }
+    .conf { position: fixed; top: -40px; pointer-events: none; z-index: 99;
+            animation: fall linear forwards; }
+    @keyframes fall { to { transform: translateY(110vh) rotate(360deg); } }
+  </style>
+</head>
+<body>
+  {% csrf_token %}
+  <div>
+    <a class="navbtn" href="/">🏠 Menyu</a>
+    <a class="navbtn" href="/profile/">👤 {{ user.username }}</a>
+  </div>
+  <div id="top">⭐ <span id="count">0</span> &nbsp; 🏅 <span id="lvl"></span></div>
+  <div id="barwrap"><div id="bar"></div></div>
+  <div id="next"></div>
+
+  <div id="game"></div>
+  <div id="uz"></div>
+  <div id="msg"></div>
+
+  {{ words|json_script:"words-data" }}
+  {{ sentences|json_script:"sents-data" }}
+  {{ level_stars|json_script:"ls-data" }}
+  <script>
+    const WORDS = JSON.parse(document.getElementById("words-data").textContent);
+    const SENTS = JSON.parse(document.getElementById("sents-data").textContent);
+    const LS = JSON.parse(document.getElementById("ls-data").textContent);
+    const SPEECH = "{{ speech }}";
+    const CSRF = document.querySelector("[name=csrfmiddlewaretoken]").value;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let stars = {{ stars }};
+    let busy = false;
+    let lastType = null, lastWord = null, lastSent = -1;
+    const $ = id => document.getElementById(id);
+
+    const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(p => p[1]);
+    const sample = (a, n) => shuffle(a).slice(0, n);
+    const el = (tag, cls, text) => {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    };
+    const levelOf = s => LS.filter(n => s >= n).length;
+
+    // Takrorlash: qiyin so'zlar ko'proq chiqadi
+    const WT = { "-1": 4, "0": 6, "1": 3, "2": 2, "3": 1, "4": 1 };
+    const weight = w => (WT[w.box] !== undefined ? WT[w.box] : 1);
+    function pickWord(pool) {
+      pool = pool || WORDS;
+      let cand = pool.filter(x => x.en !== lastWord);
+      if (!cand.length) cand = pool;
+      let r = Math.random() * cand.reduce((s, x) => s + weight(x), 0);
+      for (const x of cand) {
+        r -= weight(x);
+        if (r <= 0) { lastWord = x.en; return x; }
+      }
+      const x = cand[cand.length - 1];
+      lastWord = x.en;
+      return x;
+    }
+    function report(w, ok) {
+      if (!w || w.id === undefined) return;
+      fetch("/api/answer/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+        body: JSON.stringify({ word: w.id, ok: ok }),
+      }).catch(() => {});
+      w.box = ok ? Math.min(4, Math.max(w.box, 0) + 1) : 0;
+    }
+
+    let actx;
+    function tone(freq, start, dur, type, vol) {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type || "sine";
+      o.frequency.value = freq;
+      const t = actx.currentTime + start;
+      g.gain.setValueAtTime(vol || 0.2, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g);
+      g.connect(actx.destination);
+      o.start(t);
+      o.stop(t + dur);
+    }
+    function sound(kind) {
+      try {
+        if (kind === "good") { tone(523, 0, .15); tone(659, .12, .15); tone(784, .24, .3); }
+        else if (kind === "bad") { tone(300, 0, .2, "triangle", .12); tone(240, .15, .25, "triangle", .12); }
+        else if (kind === "level") { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * .14, .35)); }
+      } catch (e) {}
+    }
+    function confetti(n) {
+      const em = ["⭐", "🎉", "✨", "🎈", "💛"];
+      for (let i = 0; i < (n || 30); i++) {
+        const s = document.createElement("span");
+        s.className = "conf";
+        s.textContent = em[Math.floor(Math.random() * em.length)];
+        s.style.left = Math.random() * 100 + "vw";
+        s.style.animationDuration = (1.5 + Math.random() * 1.5) + "s";
+        s.style.fontSize = (20 + Math.random() * 20) + "px";
+        document.body.appendChild(s);
+        setTimeout(() => s.remove(), 3200);
+      }
+    }
+
+    function updateHeader() {
+      const lv = levelOf(stars);
+      $("count").textContent = stars;
+      $("lvl").textContent = lv;
+      const cur = LS[lv - 1], nxt = LS[lv];
+      if (nxt === undefined) {
+        $("bar").style.width = "100%";
+        $("next").textContent = "Eng yuqori daraja! 🏆";
+      } else {
+        $("bar").style.width = ((stars - cur) / (nxt - cur) * 100) + "%";
+        $("next").textContent = "Keyingi darajagacha: " + (nxt - stars) + " ⭐";
+      }
+    }
+
+    function speak(word) {
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang = SPEECH;
+      u.rate = 0.8;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    }
+
+    function wrong(btn) {
+      btn.classList.add("bad");
+      btn.disabled = true;
+      sound("bad");
+      $("msg").textContent = "Yana urinib ko'ring 🙂";
+    }
+
+    const NEW_GAME = {
+      2: "Yangi o'yin: Eshitib rasmni top 👂" + (SR ? " va Talaffuz 🎤" : ""),
+      3: "Yangi o'yinlar: So'z yig'ish 🔤 va Gap tuzish 🧩",
+      4: "Yangi o'yin: Xotira 🧠",
+    };
+
+    async function win(kind, w) {
+      busy = true;
+      if (w) {
+        $("uz").textContent = w.en + " = " + w.uz;
+        speak(w.en);
+      }
+      $("msg").textContent = "🎉 Barakalla!";
+      sound("good");
+      confetti(25);
+      try {
+        const r = await fetch("/api/star/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
+          body: JSON.stringify({ kind: kind }),
+        });
+        if (!r.ok) throw new Error("bad");
+        const d = await r.json();
+        const gained = d.stars - stars;
+        const oldLv = levelOf(stars);
+        stars = d.stars;
+        updateHeader();
+        let text = "🎉 Barakalla! +" + gained + " ⭐";
+        let delay = 2000;
+        if (d.level > oldLv) {
+          sound("level");
+          confetti(70);
+          text = "🚀 Yangi daraja: " + d.level + "!";
+          if (NEW_GAME[d.level]) text += " " + NEW_GAME[d.level];
+          delay = 4000;
+        }
+        if (d.sticker) {
+          text += " 🎁 Yangi stiker: " + d.sticker.emoji + " " + d.sticker.name;
+          delay = 4000;
+        }
+        if (d.tasks && d.tasks.length) {
+          text += " 📋 Vazifa bajarildi: " + d.tasks.map(t => t.emoji + " " + t.text).join(", ");
+          delay = Math.max(delay, 4500);
+          confetti(40);
+        }
+        $("msg").textContent = text;
+        setTimeout(nextRound, delay);
+      } catch (e) {
+        $("msg").textContent = "Aloqa xatosi. Sahifani yangilang.";
+      }
+    }
+
+    const games = {};
+
+    // 1) Rasmga qarab so'zni top
+    games.pick = function (lv) {
+      const w = pickWord();
+      const n = lv >= 2 ? 4 : 3;
+      const opts = shuffle([w, ...sample(WORDS.filter(x => x.en !== w.en), n - 1)]);
+      let hadWrong = false;
+      const g = $("game");
+      g.append(el("div", "pic", w.emoji), el("div", "hint", "Bu nima?"));
+      opts.forEach(o => {
+        const b = el("button", "btn", o.en);
+        b.onclick = () => {
+          if (busy) return;
+          speak(o.en);
+          if (o.en === w.en) {
+            if (!hadWrong) report(w, true);
+            win("pick", w);
+          } else {
+            if (!hadWrong) { hadWrong = true; report(w, false); }
+            wrong(b);
+          }
+        };
+        g.append(b);
+      });
+    };
+
+    // 2) Eshit va rasmni top
+    games.listen = function (lv) {
+      const w = pickWord();
+      const opts = shuffle([w, ...sample(WORDS.filter(x => x.en !== w.en), 3)]);
+      let hadWrong = false;
+      const g = $("game");
+      const sp = el("button", "speak", "🔊");
+      sp.onclick = () => speak(w.en);
+      const grid = el("div", "grid2");
+      opts.forEach(o => {
+        const b = el("button", "ebtn", o.emoji);
+        b.onclick = () => {
+          if (busy) return;
+          if (o.en === w.en) {
+            if (!hadWrong) report(w, true);
+            win("listen", w);
+          } else {
+            if (!hadWrong) { hadWrong = true; report(w, false); }
+            wrong(b);
+          }
+        };
+        grid.append(b);
+      });
+      g.append(el("div", "hint", "Eshiting va rasmni toping 👂"), sp, grid);
+      setTimeout(() => speak(w.en), 400);
+    };
+
+    // 3) Harflardan so'z yig'ish
+    games.spell = function (lv) {
+      const pool = WORDS.filter(x => !x.en.includes(" ") && x.en.length <= 10);
+      const w = pickWord(pool.length ? pool : WORDS);
+      const letters = w.en.split("");
+      const tiles = shuffle(letters.map((c, i) => ({ c: c, i: i })));
+      let chosen = [];
+      let hadWrong = false;
+      const g = $("game");
+      const slots = el("div");
+      slots.id = "slots";
+      const row = el("div");
+      const btns = [];
+
+      const render = () => {
+        slots.textContent = chosen.map(t => t.c)
+          .concat(Array(letters.length - chosen.length).fill("_")).join(" ");
+      };
+
+      tiles.forEach(t => {
+        const b = el("button", "tile", t.c);
+        b.onclick = () => {
+          if (busy) return;
+          chosen.push(t);
+          b.disabled = true;
+          render();
+          if (chosen.length === letters.length) {
+            if (chosen.map(x => x.c).join("") === w.en) {
+              if (!hadWrong) report(w, true);
+              win("spell", w);
+            } else {
+              if (!hadWrong) { hadWrong = true; report(w, false); }
+              sound("bad");
+              $("msg").textContent = "Yana urinib ko'ring 🙂";
+              setTimeout(reset, 700);
+            }
+          }
+        };
+        btns.push(b);
+        row.append(b);
+      });
+
+      const reset = () => {
+        chosen = [];
+        btns.forEach(b => b.disabled = false);
+        render();
+      };
+      const rb = el("button", "reset", "↩ Qaytadan");
+      rb.onclick = () => { if (!busy) { $("msg").textContent = ""; reset(); } };
+
+      g.append(
+        el("div", "pic", w.emoji),
+        el("div", "hint", "Yig'ing: " + w.uz),
+        slots, row, rb
+      );
+      render();
+    };
+
+    // 4) Xotira o'yini
+    games.memory = function (lv) {
+      const ws = sample(WORDS, 6);
+      const cards = shuffle(ws.flatMap(w => [
+        { id: w.en, v: w.emoji, word: false },
+        { id: w.en, v: w.en, word: true },
+      ]));
+      const g = $("game");
+      const grid = el("div", "mem");
+      let open = [], matched = 0, lock = false;
+
+      cards.forEach(c => {
+        const b = el("button", "card" + (c.word ? " small" : ""), "❓");
+        b.onclick = () => {
+          if (busy || lock || b.classList.contains("open") || b.classList.contains("done")) return;
+          b.textContent = c.v;
+          b.classList.add("open");
+          if (c.word) speak(c.v);
+          open.push({ b: b, c: c });
+          if (open.length === 2) {
+            const [x, y] = open;
+            if (x.c.id === y.c.id) {
+              x.b.classList.replace("open", "done");
+              y.b.classList.replace("open", "done");
+              open = [];
+              matched++;
+              if (matched === 6) win("memory", null);
+            } else {
+              lock = true;
+              setTimeout(() => {
+                [x, y].forEach(p => {
+                  p.b.textContent = "❓";
+                  p.b.classList.remove("open");
+                });
+                open = [];
+                lock = false;
+              }, 900);
+            }
+          }
+        };
+        grid.append(b);
+      });
+      g.append(el("div", "hint", "Juftlarni toping: rasm + so'z 🧠"), grid);
+    };
+
+    // 5) Gap tuzish: bo'sh joyni to'ldir
+    games.sentence = function (lv) {
+      let i;
+      do { i = Math.floor(Math.random() * SENTS.length); } while (SENTS.length > 1 && i === lastSent);
+      lastSent = i;
+      const s = SENTS[i];
+      const parts = s.text.split("___");
+      const line = el("div", "sent", parts[0] + "＿＿＿" + (parts[1] || ""));
+      const g = $("game");
+      g.append(el("div", "pic", s.emoji), line, el("div", "hint", s.uz));
+      shuffle(s.options).forEach(o => {
+        const b = el("button", "btn", o);
+        b.onclick = () => {
+          if (busy) return;
+          if (o === s.answer) {
+            const full = s.text.replace("___", s.answer);
+            line.textContent = full;
+            $("uz").textContent = s.uz;
+            speak(full);
+            win("sentence", null);
+          } else {
+            wrong(b);
+          }
+        };
+        g.append(b);
+      });
+    };
+
+    // 6) Talaffuz: so'zni ovozda ayt
+    const norm = s => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").trim();
+    games.say = function (lv) {
+      const w = pickWord();
+      const g = $("game");
+      let tries = 0, hadWrong = false;
+      const status = el("div", "hint", "Tugmani bosing va so'zni ayting");
+      const mic = el("button", "speak", "🎤");
+      const hear = el("button", "reset", "🔊 Eshitish");
+      hear.onclick = () => speak(w.en);
+
+      mic.onclick = () => {
+        if (busy) return;
+        speechSynthesis.cancel();
+        const rec = new SR();
+        rec.lang = SPEECH;
+        rec.interimResults = false;
+        rec.maxAlternatives = 5;
+        let handled = false;
+        mic.disabled = true;
+        status.textContent = "🎧 Eshityapman...";
+        rec.onresult = e => {
+          handled = true;
+          const alts = [];
+          for (let k = 0; k < e.results[0].length; k++) alts.push(e.results[0][k].transcript);
+          const target = norm(w.en);
+          const ok = alts.some(a => {
+            const n = norm(a);
+            return n === target || n.split(" ").includes(target);
+          });
+          if (ok) {
+            if (!hadWrong) report(w, true);
+            $("uz").textContent = w.en + " = " + w.uz;
+            win("say", w);
+          } else {
+            tries++;
+            if (!hadWrong) { hadWrong = true; report(w, false); }
+            sound("bad");
+            if (tries >= 3) {
+              busy = true;
+              status.textContent = "Eshiting va takrorlang: " + w.en;
+              speak(w.en);
+              $("uz").textContent = w.en + " = " + w.uz;
+              setTimeout(nextRound, 3500);
+            } else {
+              status.textContent = "Eshitganim: «" + alts[0] + "». Yana ayting 🙂";
+            }
+          }
+        };
+        rec.onerror = e => {
+          handled = true;
+          status.textContent = (e.error === "not-allowed" || e.error === "service-not-allowed")
+            ? "Mikrofonga ruxsat bering 🙏" : "Eshitilmadi, yana bosing 🎤";
+        };
+        rec.onend = () => {
+          mic.disabled = false;
+          if (!handled) status.textContent = "Eshitilmadi, yana bosing 🎤";
+        };
+        try { rec.start(); } catch (err) { mic.disabled = false; }
+      };
+
+      g.append(el("div", "pic", w.emoji), el("div", "hint", "Buni ingliz tilida ayting: " + w.uz),
+               mic, status, hear);
+    };
+
+    function nextRound() {
+      busy = false;
+      speechSynthesis.cancel();
+      $("msg").textContent = "";
+      $("uz").textContent = "";
+      $("game").innerHTML = "";
+      const lv = levelOf(stars);
+      const types = ["pick"];
+      if (lv >= 2) { types.push("listen"); if (SR) types.push("say"); }
+      if (lv >= 3) { types.push("spell"); if (SENTS.length) types.push("sentence"); }
+      if (lv >= 4) types.push("memory");
+      let t;
+      do { t = types[Math.floor(Math.random() * types.length)]; }
+      while (types.length > 1 && t === lastType);
+      lastType = t;
+      games[t](lv);
+    }
+
+    updateHeader();
+    nextRound();
+  </script>
+  {% include "game/timer.html" %}
+</body>
+</html>

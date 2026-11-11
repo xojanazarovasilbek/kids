@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KidsLingo</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #fff7d6; margin: 0; padding: 20px; }
+    #top { font-size: 22px; margin-bottom: 10px; }
+    .navbtn { display: inline-block; padding: 8px 16px; margin: 4px; border-radius: 14px;
+              background: white; color: #333; text-decoration: none; font-size: 18px;
+              box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+    h2 { margin: 14px 0 16px; }
+    .lang { font-size: 20px; padding: 10px 18px; margin: 4px; border: 3px solid transparent;
+            border-radius: 14px; background: white; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+    .lang.on { border-color: #2ecc71; background: #eafaf0; font-weight: bold; }
+    .topic { display: block; width: 80%; max-width: 320px; margin: 14px auto; padding: 18px;
+             font-size: 24px; border-radius: 18px; background: #4f9dff; color: white;
+             text-decoration: none; }
+    .topic span { font-size: 36px; display: block; }
+    .err { color: #c0392b; font-size: 18px; }
+    #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex;
+               align-items: center; justify-content: center; z-index: 50; }
+    #modal { background: white; border-radius: 24px; padding: 24px 30px; max-width: 300px; }
+    #modal .big { font-size: 70px; }
+    #modal button { font-size: 22px; padding: 12px 30px; border: none; border-radius: 14px;
+                    background: #2ecc71; color: white; margin-top: 12px; }
+    .conf { position: fixed; top: -40px; pointer-events: none; z-index: 99;
+            animation: fall linear forwards; }
+    @keyframes fall { to { transform: translateY(110vh) rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="top">⭐ {{ stars }} &nbsp; 🏅 Daraja {{ level }} &nbsp; 🔥 {{ streak }}</div>
+    <div style="font-size:18px; color:#555; margin:6px 0">{{ time_text }}</div>
+  <a class="navbtn" href="/profile/">👤 {{ user.username }}</a>
+  <a class="navbtn" href="/stickers/">🎁 Stikerlarim</a>
+  <a class="navbtn" href="/speed/">⏱ Tez javob</a>
+  <a class="navbtn" href="/pet/">🐣 Hayvonim</a>
+  <a class="navbtn" href="/tasks/">📋 Vazifalar {{ tasks_text }}</a>
+
+  <h2>🌍 Qaysi tilni o'rganamiz?</h2>
+  <form method="post" action="/lang/">
+    {% csrf_token %}
+    {% for l in langs %}
+      <button class="lang{% if l.code == lang %} on{% endif %}" name="lang" value="{{ l.code }}">{{ l.name }}</button>
+    {% endfor %}
+  </form>
+
+  {% if error %}<p class="err">{{ error }}</p>{% endif %}
+  <h2>Mavzuni tanlang</h2>
+  {% for t in topics %}
+    <a class="topic" href="/play/{{ t.key }}/"><span>{{ t.icon }}</span>{{ t.title }}</a>
+  {% endfor %}
+
+  {% if bonus %}
+  <div id="overlay">
+    <div id="modal">
+      <div class="big">🎁</div>
+      <h2>Kunlik sovg'a!</h2>
+      <div style="font-size:26px">+{{ bonus.total }} ⭐</div>
+      <div style="font-size:20px; margin-top:8px">🔥 {{ streak }} kun ketma-ket</div>
+      {% if bonus.extra %}
+        <div style="font-size:16px; color:#e67e22; margin-top:6px">Streak bonusi: +{{ bonus.extra }} ⭐</div>
+      {% endif %}
+      <button onclick="closeBonus()">Rahmat!</button>
+    </div>
+  </div>
+  <script>
+    function closeBonus() { document.getElementById("overlay").remove(); }
+    (function () {
+      const em = ["⭐", "🎉", "✨", "🎈", "💛"];
+      for (let i = 0; i < 40; i++) {
+        const s = document.createElement("span");
+        s.className = "conf";
+        s.textContent = em[Math.floor(Math.random() * em.length)];
+        s.style.left = Math.random() * 100 + "vw";
+        s.style.animationDuration = (1.5 + Math.random() * 2) + "s";
+        s.style.fontSize = (20 + Math.random() * 20) + "px";
+        document.body.appendChild(s);
+        setTimeout(() => s.remove(), 4000);
+      }
+    })();
+  </script>
+  {% endif %}
+</body>
+</html>

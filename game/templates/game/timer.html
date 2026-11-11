@@ -1,0 +1,26 @@
+<div id="timebox" style="position:fixed;right:10px;bottom:10px;background:white;padding:6px 12px;border-radius:14px;box-shadow:0 2px 6px rgba(0,0,0,.2);font-size:18px;z-index:40"></div>
+<script>
+(function () {
+  let left = {{ time_left }};
+  const box = document.getElementById("timebox");
+  const tk = document.querySelector("[name=csrfmiddlewaretoken]").value;
+  function show() {
+    const m = Math.floor(left / 60), s = left % 60;
+    box.textContent = "⏳ " + m + ":" + String(s).padStart(2, "0");
+  }
+  show();
+  setInterval(() => { if (!document.hidden && left > 0) { left--; show(); } }, 1000);
+  async function tick() {
+    if (document.hidden) return;
+    try {
+      const r = await fetch("/api/tick/", { method: "POST", headers: { "X-CSRFToken": tk } });
+      const d = await r.json();
+      left = d.left;
+      show();
+      if (left <= 0) location.reload();
+    } catch (e) {}
+  }
+  tick();
+  setInterval(tick, 10000);
+})();
+</script>

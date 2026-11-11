@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stikerlarim</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #fff7d6; margin: 0; padding: 20px; }
+    .navbtn { display: inline-block; padding: 8px 16px; margin: 4px; border-radius: 14px;
+              background: white; color: #333; text-decoration: none; font-size: 18px;
+              box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+    #top { font-size: 28px; margin: 8px 0; }
+    h2 { margin: 10px 0 20px; }
+    #grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; max-width: 360px; margin: 0 auto; }
+    .card { background: white; border-radius: 18px; padding: 16px 8px; box-shadow: 0 2px 6px rgba(0,0,0,.1); }
+    .card .e { font-size: 64px; }
+    .card .n { font-size: 18px; margin-top: 6px; }
+    .card.locked { background: #e6e6e6; }
+    .card.locked .e { filter: grayscale(1); opacity: .25; }
+    .card.locked .n { color: #777; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <a class="navbtn" href="/">🏠 Menyu</a>
+  <div id="top">⭐ {{ stars }}</div>
+  <h2>Stikerlarim</h2>
+  <div id="grid"></div>
+
+  {{ stickers|json_script:"stickers-data" }}
+  <script>
+    const stars = {{ stars }};
+    const stickers = JSON.parse(document.getElementById("stickers-data").textContent);
+    const grid = document.getElementById("grid");
+
+    stickers.forEach(s => {
+      const card = document.createElement("div");
+      const open = stars >= s.need;
+      card.className = "card" + (open ? "" : " locked");
+      card.innerHTML = '<div class="e">' + s.emoji + '</div><div class="n"></div>';
+      card.querySelector(".n").textContent = open ? s.name : "🔒 " + s.need + " ⭐ kerak";
+      grid.appendChild(card);
+    });
+  </script>
+</body>
+</html>

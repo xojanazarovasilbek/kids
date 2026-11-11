@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vazifalar</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #fff7d6; margin: 0; padding: 20px; }
+    .navbtn { display: inline-block; padding: 8px 16px; margin: 4px; border-radius: 14px;
+              background: white; color: #333; text-decoration: none; font-size: 18px;
+              box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+    .task { background: white; max-width: 340px; margin: 12px auto; padding: 14px; border-radius: 18px; text-align: left; }
+    .task.done { background: #eafaf0; }
+    .t { font-size: 20px; }
+    .bar { height: 12px; background: #ddd; border-radius: 6px; margin: 8px 0 4px; overflow: hidden; }
+    .fill { height: 100%; background: #2ecc71; }
+    .small { font-size: 15px; color: #666; }
+  </style>
+</head>
+<body>
+  <a class="navbtn" href="/">🏠 Menyu</a>
+  <h2>📋 Bugungi vazifalar</h2>
+  <p>{{ done }} / {{ tasks|length }} bajarildi. Har biri uchun +5 ⭐</p>
+  {% for t in tasks %}
+    <div class="task{% if t.done %} done{% endif %}">
+      <div class="t">{{ t.emoji }} {{ t.text }} {% if t.done %}✅{% endif %}</div>
+      <div class="bar"><div class="fill" style="width: {{ t.pct }}%"></div></div>
+      <div class="small">{{ t.have }} / {{ t.need }}</div>
+    </div>
+  {% endfor %}
+  <p class="small">Vazifalar har kuni yangilanadi. Yangi o'yinlar ochilganda yangi vazifalar ham paydo bo'ladi.</p>
+</body>
+</html>
